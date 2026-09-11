@@ -5,37 +5,70 @@ on:
   push:
     paths:
       - 'SelyApp.zip'
+      - '.github/workflows/build-apk.yml'
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Get project
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract ZIP
+      - name: Extract Android project
         run: |
+          mkdir project
           unzip -q SelyApp.zip -d project
 
-      - name: Find Android project
-        run: |
-          find project -name settings.gradle -o -name settings.gradle.kts
+          echo "Files extracted:"
+          find project -maxdepth 3 -type f | head -100
 
-      - name: Set up Java
+      - name: Find project directory
+        id: find_project
+        run: |
+          if [ -f "project/settings.gradle" ] || [ -f "project/settings.gradle.kts" ]; then
+            echo "dir=project" >> "$GITHUB_OUTPUT"
+          else
+            DIR=$(find project -name settings.gradle -o -name settings.gradle.kts | head -1 | xargs -r dirname)
+            if [ -z "$DIR" ]; then
+              echo "Could not find settings.gradle"
+              exit 1
+            fi
+            echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Build APK
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradle executable
+        working-directory: ${{ steps.find_project.outputs.dir }}
         run: |
-          cd project
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+          fi
+
+      - name: Build APK
+        working-directory: ${{ steps.find_project.outputs.dir }}
+        run: |
+          if [ -f "./gradlew" ]; then
+            ./gradlew assembleDebug
+          else
+            gradle assembleDebug
+          fi
+
+      - name: Find APK
+        run: |
+          find . -type f -name "*.apk" -print
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: SelyApp-APK
           path: '**/build/outputs/apk/**/*.apk'
+          if-no-files-found: error
