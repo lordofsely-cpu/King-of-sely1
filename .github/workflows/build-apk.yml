@@ -29,13 +29,29 @@ jobs:
           if [ -f "project/settings.gradle" ] || [ -f "project/settings.gradle.kts" ]; then
             echo "dir=project" >> "$GITHUB_OUTPUT"
           else
-            DIR=$(find project -name settings.gradle -o -name settings.gradle.kts | head -1 | xargs -r dirname)
+            DIR=$(find project -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit | xargs -r dirname)
             if [ -z "$DIR" ]; then
               echo "Could not find settings.gradle"
               exit 1
             fi
             echo "dir=$DIR" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Enable AndroidX
+        working-directory: ${{ steps.find_project.outputs.dir }}
+        run: |
+          touch gradle.properties
+
+          if ! grep -q "^android.useAndroidX=true" gradle.properties; then
+            echo "android.useAndroidX=true" >> gradle.properties
+          fi
+
+          if ! grep -q "^android.enableJetifier=true" gradle.properties; then
+            echo "android.enableJetifier=true" >> gradle.properties
+          fi
+
+          echo "gradle.properties:"
+          cat gradle.properties
 
       - name: Set up JDK
         uses: actions/setup-java@v4
